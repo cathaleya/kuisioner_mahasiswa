@@ -1,324 +1,398 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime
-import io
 import requests
+import datetime
+import base64
+import os
 
-# ─── KONSTANTA ───────────────────────────────────────────────────────────────
-APPS_SCRIPT_URL = st.secrets.get("APPS_SCRIPT_URL", "")
-SHEET_NAME      = "Mahasiswa"
+# ==========================================
+# CONFIG & STYLES
+# ==========================================
+st.set_page_config(page_title="Instrumen Evaluasi S-ELT", page_icon="🎓", layout="centered")
 
-KUESIONER = [
-    {
-        "judul": "Kuesioner Flipbook Interaktif Berbasis Integrated Language Skills",
-        "seksi": [
-            {"nama": "Interaktivitas", "items": [
-                "Flipbook mudah dinavigasi saat digunakan.",
-                "Menu dan tombol dalam flipbook mudah dipahami.",
-                "Flipbook memberikan respon (feedback) terhadap aktivitas pengguna.",
-                "Saya dapat berpindah antar halaman dengan mudah.",
-            ]},
-            {"nama": "Integrasi Keterampilan Bahasa", "items": [
-                "Flipbook menyediakan latihan mendengarkan (listening) yang jelas.",
-                "Flipbook menyediakan latihan berbicara (speaking) yang membantu.",
-                "Flipbook menyediakan teks bacaan (reading) yang menarik.",
-                "Flipbook menyediakan latihan menulis (writing) yang relevan.",
-                "Keterampilan listening, speaking, reading, dan writing terintegrasi dengan baik.",
-            ]},
-            {"nama": "Desain Pembelajaran", "items": [
-                "Tampilan flipbook menarik secara visual.",
-                "Materi dalam flipbook disusun secara sistematis.",
-                "Flipbook membuat saya lebih tertarik untuk belajar.",
-                "Flipbook membantu saya memahami materi dengan lebih mudah.",
-                "Tampilan flipbook menarik secara visual.", # Duplicate from word
-                "Flipbook dapat memberi motivasi dalam minat belajar.",
-                "Tampilan flipbook sesuai karakteristik mahasiswa PGSD.",
-            ]},
-            {"nama": "Kegunaan (Usability)", "items": [
-                "Flipbook mudah digunakan tanpa bantuan orang lain.",
-                "Flipbook membantu meningkatkan efektivitas belajar saya.",
-                "Flipbook menghemat waktu dalam memahami materi.",
-                "Flipbook dapat digunakan kapan saja dan di mana saja.",
-            ]},
-        ]
-    },
-    {
-        "judul": "Kuesioner Adaptive Thinking English Communication",
-        "seksi": [
-            {"nama": "Language Adaptability", "items": [
-                "Saya mampu menyesuaikan bahasa Inggris dalam situasi formal dan informal.",
-                "Saya dapat menyesuaikan cara berbicara sesuai lawan bicara.",
-                "Saya mampu memahami berbagai aksen bahasa Inggris.",
-                "Saya menggunakan kosakata sesuai konteks pembicaraan.",
-                "Saya dapat menyesuaikan kosakata bahasa Inggris sesuai dengan konteks pembelajaran di SD.",
-                "Saya mampu menggunakan bahasa Inggris sederhana ketika menjelaskan materi kepada siswa SD.",
-                "Saya dapat mengubah struktur kalimat agar lebih mudah dipahami oleh lawan bicara.",
-                "Saya tetap dapat berkomunikasi dalam bahasa Inggris meskipun memiliki keterbatasan kosakata.",
-                "Saya mampu menyesuaikan bahasa ketika menghadapi situasi komunikasi yang tidak terduga.",
-                "Saya dapat mengubah gaya bahasa Inggris saya ketika berbicara dengan dosen, teman, atau siswa.",
-            ]},
-            {"nama": "Cognitive Flexibility", "items": [
-                "Saya mampu memahami informasi bahasa Inggris dari audio, teks, and video.",
-                "Saya mengubah strategi ketika mengalami kesulitan berkomunikasi.",
-                "Saya dapat menghubungkan ide-ide dalam bahasa Inggris.",
-                "Saya mampu memahami makna tersirat dalam percakapan.",
-                "Saya mampu berpikir cepat dalam merespon percakapan bahasa Inggris.",
-                "Saya dapat memahami makna kalimat bahasa Inggris dari konteks, meskipun tidak mengetahui semua kata.",
-                "Saya dapat mengubah strategi komunikasi ketika mengalami kesulitan memahami lawan bicara.",
-                "Saya mampu melihat berbagai kemungkinan makna dari satu ungkapan bahasa Inggris.",
-                "Saya mampu berpindah dari satu topik ke topik lain dalam percakapan bahasa Inggris dengan lancar.",
-                "Saya dapat menghubungkan pengetahuan sebelumnya dengan informasi baru dalam bahasa Inggris.",
-                "Saya mampu menemukan cara alternatif untuk menyampaikan ide dalam bahasa Inggris.",
-                "Saya tidak mudah bingung ketika menghadapi situasi komunikasi yang kompleks dalam bahasa Inggris.",
-                "Saya mampu memahami informasi bahasa Inggris dari berbagai sumber.",
-                "Saya mampu menghubungkan ide dalam bahasa Inggris secara logis.",
-                "Saya dapat memahami makna tersirat dalam percakapan bahasa Inggris.",
-            ]},
-            {"nama": "Integrated Communication Skills", "items": [
-                "Saya dapat merespon percakapan setelah mendengarkan.",
-                "Saya mampu menjelaskan isi bacaan secara lisan.",
-                "Saya dapat menulis berdasarkan informasi yang didengar.",
-                "Saya mampu merespon secara cepat dalam percakapan.",
-                "Saya dapat memahami instruksi dalam bahasa Inggris dan melaksanakannya dengan benar.",
-                "Saya dapat mengintegrasikan berbagai keterampilan bahasa Inggris dalam kegiatan pembelajaran.",
-                "Saya mampu menggunakan bahasa tubuh dan ekspresi untuk mendukung komunikasi bahasa Inggris.",
-                "Saya dapat merespon percakapan dengan tepat berdasarkan apa yang saya dengar.",
-                "Saya mampu menulis ide dalam bahasa Inggris dan menjelaskannya secara lisan.",
-                "Saya mampu menggabungkan keterampilan mendengar dan berbicara dalam komunikasi bahasa Inggris.",
-            ]},
-            {"nama": "Communicative Problem Solving", "items": [
-                "Saya bertanya ulang ketika tidak memahami percakapan.",
-                "Saya menggunakan kata lain (parafrase) saat kesulitan.",
-                "Saya tetap berkomunikasi walaupun kosakata terbatas.",
-                "Saya mampu memperbaiki kesalahan komunikasi.",
-                "Saya mampu mencari cara untuk tetap berkomunikasi ketika mengalami kesulitan dalam bahasa Inggris.",
-                "Saya mampu meminta klarifikasi ketika tidak memahami lawan bicara.",
-                "Saya dapat memperbaiki kesalahan komunikasi dalam bahasa Inggris secara mandiri.",
-                "Saya mampu menemukan solusi ketika terjadi miskomunikasi dalam percakapan bahasa Inggris.",
-                "Saya tetap percaya diri dalam berkomunikasi meskipun mengalami kesalahan.",
-                "Saya dapat menggunakan strategi seperti gesture atau contoh untuk memperjelas maksud, dan tujuan komunikasi.",
-            ]},
-        ]
-    },
-    {
-        "judul": "Kuesioner Kompetensi Profesional Mahasiswa PGSD",
-        "seksi": [
-            {"nama": "Content Mastery", "items": [
-                "Saya memahami materi Bahasa Inggris untuk siswa SD.",
-                "Saya mampu menjelaskan materi pembelajaran bahasa inggris dengan sederhana kepada siswa SD.",
-                "Saya dapat mengaitkan materi dengan kehidupan sehari-hari.",
-                "Saya memahami konsep dasar materi Bahasa Inggris untuk siswa SD yang akan diajarkan.",
-                "Saya memahami keterkaitan antar topik dalam satu mata pelajaran.",
-                "Saya mampu menjawab pertanyaan siswa terkait materi pembelajaran dengan tepat.",
-                "Saya menguasai berbagai sumber belajar untuk memperdalam materi ajar.",
-                "Saya mampu mengembangkan materi ajar sesuai dengan kebutuhan siswa.",
-            ]},
-            {"nama": "Pedagogical Skills", "items": [
-                "Saya mampu merancang pembelajaran berbasis digital.",
-                "Saya mampu menggunakan flipbook dalam pembelajaran.",
-                "Saya dapat mengelola kelas dengan baik.",
-                "Saya mampu merancang rencana pembelajaran yang sistematis dan terstruktur.",
-                "Saya menggunakan metode pembelajaran yang bervariasi sesuai dengan karakteristik siswa.",
-                "Saya mampu mengelola kelas secara efektif selama proses pembelajaran.",
-                "Saya dapat menyesuaikan strategi pembelajaran berdasarkan kebutuhan siswa.",
-                "Saya mampu menciptakan suasana belajar yang aktif dan menyenangkan.",
-                "Saya menggunakan teknik penilaian yang sesuai untuk mengukur hasil belajar siswa.",
-                "Saya mampu memberikan umpan balik yang konstruktif kepada siswa.",
-                "Saya dapat mengidentifikasi kesulitan belajar siswa dan memberikan solusi yang tepat.",
-                "Saya dapat mendesain pembelajaran dengan mengintegrasikan empat keterampilan Bahasa Inggris (menyimak, berbicara, membaca, dan menulis).",
-            ]},
-            {"nama": "Digital Competence", "items": [
-                "Saya mampu menggunakan teknologi dalam pembelajaran.",
-                "Saya dapat membuat bahan ajar digital sederhana.",
-                "Saya mampu mengintegrasikan teknologi dalam proses belajar.",
-                "Saya mampu menggunakan teknologi dalam pembelajaran.", # 24.
-                "Saya dapat membuat bahan ajar digital sederhana (PPT, e-modul, flipbook).", # 25.
-                "Saya dapat memanfaatkan media pembelajaran berbasis digital (video, aplikasi, dll.).", # 26.
-                "Saya dapat menggunakan platform pembelajaran online untuk mendukung kegiatan belajar.", # 27.
-                "Saya memahami etika penggunaan teknologi dalam pembelajaran.", # 28.
-                "Saya dapat membantu siswa dalam menggunakan teknologi untuk belajar.", # 29.
-                "Saya mampu memilih media digital yang sesuai dengan tujuan pembelajaran.", # 30.
-            ]},
-            {"nama": "Professional Communication", "items": [
-                "Saya mampu menjelaskan materi dalam bahasa Inggris.", # 31.
-                "Saya percaya diri berbicara dalam bahasa Inggris.", # 32.
-                "Saya mampu berinteraksi dengan siswa menggunakan bahasa Inggris.", # 33.
-                "Saya mampu menjelaskan materi dalam bahasa Inggris.", # 34.
-                "Saya dapat berkomunikasi dengan rekan sejawat secara profesional.", # 35.
-                "Saya mampu menerima dan memberikan kritik secara konstruktif.", # 36.
-                "Saya mampu menyesuaikan gaya komunikasi dengan situasi pembelajaran.", # 37.
-                "Saya mampu berkomunikasi dengan siswa secara jelas dan efektif.", # 38.
-                "Saya mampu menjelaskan instruksi pembelajaran dengan mudah dipahami siswa.", # 39.
-                "Saya menunjukkan sikap percaya diri saat menyampaikan materi pembelajaran bahasa inggris kepada siswa.", # 40.
-            ]},
-        ]
-    },
-]
+def local_css():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    
+    .main {
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    }
+    
+    .stApp {
+        background-color: #ffffff;
+    }
 
-DESKRIPSI = [
-    "Bagaimana pengalaman Anda menggunakan flipbook interaktif? Uraikan dengan rinci.",
-    "Apakah flipbook membantu meningkatkan kemampuan profesional dalam pembelajaran bahasa Inggris Anda? Jelaskan alasannya.",
-    "Bagaimana pengaruhnya terhadap cara berpikir adaptif dan komunikasi pada pembelajaran Bahasa Inggris Anda? Uraikan dengan rinci.",
-]
+    div[data-testid="stForm"] {
+        border: none;
+        padding: 0;
+    }
+    
+    .stRadio > div {
+        background: #f8fafc;
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .stRadio > div:hover {
+        border-color: #10b981;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.05);
+    }
+    
+    h1, h2, h3 { color: #064e3b; font-weight: 800; }
+    
+    .stButton > button {
+        width: 100%;
+        background-color: #10b981 !important;
+        color: white !important;
+        border-radius: 12px;
+        padding: 15px;
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stButton > button:hover {
+        background-color: #059669 !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
 
-LIKERT = {
-    "🤩 Sangat Suka": 5, 
-    "🙂 Suka": 4,
-    "😐 Biasa Saja": 3, 
-    "🙁 Kurang Suka": 2, 
-    "😠 Tidak Suka": 1
+    .hero-section {
+        background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);
+        padding: 40px 20px;
+        border-radius: 20px;
+        color: white;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .dimension-card {
+        background: #ecfdf5;
+        padding: 10px 20px;
+        border-radius: 10px;
+        border-left: 5px solid #10b981;
+        margin: 25px 0 15px 0;
+        font-weight: bold;
+        color: #064e3b;
+    }
+    
+    .success-card {
+        background: #f0fdf4;
+        padding: 40px;
+        border-radius: 24px;
+        text-align: center;
+        border: 2px solid #bbf7d0;
+    }
+
+    /* Flipbook Mobile Optimization */
+    .flipbook-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+        aspect-ratio: 3/4;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+local_css()
+
+# ==========================================
+# DATA & IMAGE LOADING
+# ==========================================
+KUESIONER = {
+    "1. SINTAKS (SYNTAX)": [
+        "Alur pembelajaran S-ELT jelas dan mudah diikuti",
+        "Tahapan pembelajaran tersusun sistematis",
+        "Urutan kegiatan menunjukkan hubungan yang logis",
+        "Setiap tahap memiliki tujuan yang jelas",
+        "Tahap decomposition terlihat dalam sintaks",
+        "Tahap pattern recognition terintegrasi",
+        "Tahap abstraction membantu pemahaman",
+        "Tahap algorithmic thinking muncul dalam aktivitas",
+        "Gamifikasi terintegrasi dalam sintaks",
+        "Sintaks memungkinkan pembelajaran adaptif",
+        "Terdapat mekanisme pengulangan (loop learning)",
+        "Sintaks dapat diterapkan dalam kelas nyata"
+    ],
+    "2. SISTEM SOSIAL (SOCIAL SYSTEM)": [
+        "Model mendorong mahasiswa aktif belajar",
+        "Mahasiswa terlibat dalam proses analisis",
+        "Mahasiswa berpikir mandiri dalam menyelesaikan tugas",
+        "Peran dosen sebagai fasilitator sudah tepat",
+        "Dosen tidak mendominasi pembelajaran",
+        "Interaksi mahasiswa dengan sistem berjalan baik",
+        "Interaksi sosial antar mahasiswa terjadi",
+        "Model mendukung pembelajaran mandiri",
+        "Mahasiswa dapat mengontrol proses belajar sendiri",
+        "Model menciptakan suasana belajar interaktif"
+    ],
+    "3. PRINSIP REAKSI (PRINCIPLES OF REACTION)": [
+        "Sistem memberikan umpan balik secara langsung",
+        "Feedback membantu memahami kesalahan",
+        "Respons sistem sesuai kemampuan mahasiswa",
+        "Sistem memberikan petunjuk (hint) saat salah",
+        "Dosen memberikan arahan tanpa langsung memberi jawaban",
+        "Dosen mendorong mahasiswa berpikir",
+        "Feedback sistem bersifat jelas dan mudah dipahami",
+        "Respons pembelajaran bersifat adaptif"
+    ],
+    "4. SISTEM PENDUKUNG (SUPPORT SYSTEM)": [
+        "Aplikasi Android mudah digunakan",
+        "Tampilan aplikasi menarik",
+        "Navigasi sistem mudah dipahami",
+        "Materi pembelajaran sesuai kebutuhan",
+        "Materi terintegrasi dengan Computational Thinking",
+        "Fitur aplikasi mendukung pembelajaran",
+        "Sistem mendukung pembelajaran interaktif",
+        "Dosen mampu menggunakan model dengan baik",
+        "Infrastruktur mendukung implementasi"
+    ],
+    "5. GAMIFIKASI & ALGORITMA": [
+        "Sistem gamifikasi meningkatkan motivasi belajar",
+        "Level dan reward mendorong partisipasi",
+        "Aktivitas game tidak mengganggu tujuan belajar",
+        "Sistem adaptif bekerja dengan baik",
+        "Algoritma menentukan jalur belajar secara tepat",
+        "Gamifikasi meningkatkan keterlibatan mahasiswa",
+        "Sistem memberi pengalaman belajar yang menyenangkan"
+    ],
+    "6. DAMPAK INSTRUKSIONAL": [
+        "Model meningkatkan kemampuan grammar",
+        "Model meningkatkan vocabulary",
+        "Model meningkatkan speaking ability",
+        "Model meningkatkan pemahaman teks",
+        "Model meningkatkan kemampuan berpikir logis",
+        "Model meningkatkan kemampuan problem solving",
+        "Model meningkatkan Computational Thinking"
+    ],
+    "7. DAMPAK PENGIRING (NURTURANT EFFECTS)": [
+        "Model meningkatkan kemandirian belajar",
+        "Model meningkatkan motivasi belajar",
+        "Model meningkatkan kepercayaan diri",
+        "Model meningkatkan keterampilan berpikir kritis",
+        "Model meningkatkan literasi digital",
+        "Model meningkatkan kemampuan adaptasi belajar"
+    ]
 }
 
-# ─── INITIAL STATE ───────────────────────────────────────────────────────────
+PERTANYAAN_TERBUKA = [
+    "Apa keunggulan utama Smart- English Language Teaching (S- ELT)?",
+    "Apa kelemahan model Smart- English Language Teaching (S- ELT) ini?",
+    "Apa yang perlu diperbaiki dari model Smart- English Language Teaching (S- ELT)?",
+    "Apakah model Smart- English Language Teaching (S- ELT) ini cocok untuk calon guru SD? Jelaskan!",
+    "Bagaimana pengalaman Anda menggunakan model Smart- English Language Teaching (S- ELT) ini?"
+]
+
+LIKERT_OPTIONS = {
+    5: "🤩 Sangat Setuju",
+    4: "🙂 Setuju",
+    3: "😐 Cukup",
+    2: "☹️ Tidak Setuju",
+    1: "😡 Sangat Tidak Setuju"
+}
+
+@st.cache_data
+def get_guide_images():
+    imgs = []
+    folder = r"d:\Riset_Prof_Herlina\riset_BIMA\prototype_selt\buku_panduan\gambar_aplikasi"
+    for i in range(1, 20):
+        path = os.path.join(folder, f"{i}.png")
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+                imgs.append(f"data:image/png;base64,{data}")
+    return imgs
+
+# ==========================================
+# STATE MANAGEMENT
+# ==========================================
 if 'step' not in st.session_state:
-    st.session_state.step = 1
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = {}
+    st.session_state.step = 0 # Mulai dari Panduan
+if 'data_diri' not in st.session_state:
+    st.session_state.data_diri = {}
+if 'responses' not in st.session_state:
+    st.session_state.responses = {}
+if 'essays' not in st.session_state:
+    st.session_state.essays = {}
 
-# ─── GOOGLE SHEETS via APPS SCRIPT ──────────────────────────────────────────
-def build_headers():
-    hdrs = ["Timestamp", "Nama", "Institusi", "Kontak", "Email"]
-    # Individual Questions
-    q_num = 0
-    for k in KUESIONER:
-        for s in k["seksi"]:
-            for _ in s["items"]:
-                q_num += 1
-                hdrs.append(f"Q{q_num}")
-    # Essay / Description
-    for i in range(1, len(DESKRIPSI) + 1):
-        hdrs.append(f"Deskripsi_{i}")
-    # Calculated Metrics
-    hdrs.append("Total_Mean")
-    for k in KUESIONER:
-        for s in k["seksi"]:
-            safe_name = s['nama'].replace(' ','_').replace('(','').replace(')','')
-            hdrs.append(f"Mean_{safe_name}")
-    return hdrs
-
-def save_to_gsheet(nama, institusi, kontak, email, answers, deskripsi_list):
-    if not APPS_SCRIPT_URL:
-        return False, "APPS_SCRIPT_URL belum diisi."
+# ==========================================
+# FUNCTIONS
+# ==========================================
+def save_to_gsheet(payload):
+    url = st.secrets.get("APPS_SCRIPT_URL", "")
+    if not url:
+        st.error("Konfigurasi APPS_SCRIPT_URL tidak ditemukan!")
+        return False
     try:
-        df  = pd.DataFrame(answers)
-        ts  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        res = requests.post(url, json=payload, timeout=15)
+        return res.status_code == 200
+    except:
+        return False
+
+# ==========================================
+# STEP 0: BUKU PANDUAN (FLIPBOOK)
+# ==========================================
+if st.session_state.step == 0:
+    st.markdown('<div class="hero-section"><h1>📖 Buku Panduan S-ELT</h1><p>Geser atau klik untuk membalik halaman panduan</p></div>', unsafe_allow_html=True)
+    
+    images = get_guide_images()
+    
+    if images:
+        # Flipbook HTML Component
+        img_tags = "".join([f'<div class="page"><img src="{img}" style="width:100%; height:100%; object-fit:contain;"></div>' for img in images])
         
-        # Row data assembly
-        row = [ts, nama, institusi, kontak, email]
-        # Raw scores as numbers
-        row += [int(s) for s in df["Skor"].tolist()]
-        # Essay answers
-        row += [d["Jawaban"] for d in deskripsi_list]
-        # Overall Mean
-        row.append(round(float(df["Skor"].mean()), 3))
-        # Dimensional Means
-        for k in KUESIONER:
-            for s in k["seksi"]:
-                mask = (df["Kuesioner"] == k["judul"]) & (df["Dimensi"] == s["nama"])
-                dim_mean = df.loc[mask, "Skor"].mean()
-                row.append(round(float(dim_mean), 3))
-                
-        payload = {"sheet": SHEET_NAME, "headers": build_headers(), "row": row}
-        resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
-        result = resp.json()
-        return (True, None) if result.get("status") == "ok" else (False, result.get("message"))
-    except Exception as e:
-        return False, str(e)
+        html_code = f"""
+        <div id="book-container" style="width: 100%; height: 500px; display: flex; justify-content: center; align-items: center; background: #f1f5f9; border-radius: 15px; overflow: hidden; position: relative;">
+            <div id="flipbook" style="width: 320px; height: 450px;">
+                {img_tags}
+            </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+        <script>
+            const pageFlip = new St.PageFlip(document.getElementById('flipbook'), {{
+                width: 320,
+                height: 450,
+                size: "fixed",
+                minWidth: 320,
+                maxWidth: 320,
+                minHeight: 450,
+                maxHeight: 450,
+                maxShadowOpacity: 0.5,
+                showCover: true,
+                mobileScrollSupport: false
+            }});
+            pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+        </script>
+        <style>
+            .page {{ background-color: white; box-shadow: 0 0 20px rgba(0,0,0,0.1); }}
+        </style>
+        """
+        st.components.v1.html(html_code, height=520)
+        
+        st.info("💡 **Tips Android**: Gunakan satu jari untuk menggeser ujung halaman buku ke kiri atau kanan.")
+    else:
+        st.error("Gagal memuat gambar panduan. Pastikan folder gambar tersedia.")
 
-# ─── PAGE CONFIG ─────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Survey S-ELT Mahasiswa", page_icon="🎓", layout="centered")
+    if st.button("Selesai Membaca & Mulai Mengisi ➔"):
+        st.session_state.step = 1
+        st.rerun()
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-.hero { background: linear-gradient(135deg,#064e3b 0%,#059669 100%); padding: 2.5rem 2rem; border-radius: 24px; color: white; margin-bottom: 2rem; text-align: center; box-shadow: 0 10px 30px rgba(6,78,59,0.2); }
-.hero h1 { font-size:2.2rem; margin:0 0 .5rem; font-weight:800; }
-.hero p  { margin:0; opacity:.9; font-size:1.1rem; }
-.k-header { background:#ecfdf5; border-left:6px solid #10b981; padding:1rem 1.5rem; border-radius:0 15px 15px 0; font-weight:800; color:#064e3b; font-size:1.2rem; margin:2.5rem 0 1rem; }
-.s-header { background: #f0fdf4; color:#166534; padding:.6rem 1.2rem; border-radius:10px; font-weight:700; font-size:1rem; margin:1.2rem 0 .8rem; border: 1px solid #dcfce7; }
-.item-row { background:white; border-radius:15px; padding:1.2rem; margin:.8rem 0; box-shadow:0 2px 10px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; font-size:1rem; color:#1e293b; line-height: 1.5; }
-.step-indicator { text-align: center; margin-bottom: 20px; color: #064e3b; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px; }
-</style>
-""", unsafe_allow_html=True)
-
-# ─── HEADER ──────────────────────────────────────────────────────────────────
-st.markdown('<div class="hero"><h1>📝 Angket Respon Mahasiswa</h1><p>Platform Smart-English Language Teaching (S-ELT)</p></div>', unsafe_allow_html=True)
-
-# ─── STEP 1: IDENTITAS ───────────────────────────────────────────────────────
-if st.session_state.step == 1:
-    st.markdown('<div class="step-indicator">TAHAP 1: IDENTITAS</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        st.markdown("### 👤 Data Diri")
-        nama = st.text_input("Nama Lengkap *", placeholder="Ketik namamu...")
-        inst = st.text_input("Asal Kampus *", placeholder="Nama Universitas")
-        c1, c2 = st.columns(2)
-        wa = c1.text_input("No. WhatsApp", placeholder="08xxx")
-        em = c2.text_input("Email", placeholder="user@gmail.com")
-        if st.button("Lanjutkan ➔", use_container_width=True):
-            if not nama.strip() or not inst.strip():
-                st.warning("⚠️ Mohon isi Nama and Kampus ya!")
-            else:
-                st.session_state.user_data = {"nama":nama, "inst":inst, "wa":wa, "em":em}
+# ==========================================
+# STEP 1: IDENTITAS
+# ==========================================
+elif st.session_state.step == 1:
+    st.markdown("""
+        <div class="hero-section">
+            <h1 style="margin-bottom:0;">🎓 ANGKET RESPON MAHASISWA</h1>
+            <a href="https://www.s-elt.cloud" style="color: white; text-decoration: none; font-weight: 600; opacity: 0.9;">www.s-elt.cloud</a>
+            <p style="margin-top:15px; font-size: 1.1rem;">Evaluasi Model Smart-English Language Teaching (S-ELT)</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("👤 Identitas Responden")
+    
+    with st.form("id_form"):
+        nama = st.text_input("Nama / Inisial *")
+        peran = st.selectbox("Peran", ["Mahasiswa", "Dosen", "Guru", "Lainnya"])
+        digital = st.radio("Pernah menggunakan media digital?", ["Ya", "Tidak"], horizontal=True)
+        
+        col1, col2 = st.columns(2)
+        if col1.form_submit_button("⬅ Buka Panduan"):
+            st.session_state.step = 0
+            st.rerun()
+            
+        if col2.form_submit_button("Lanjutkan ke Instrumen ➔"):
+            if nama.strip():
+                st.session_state.data_diri = {
+                    "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Nama": nama,
+                    "Peran": peran,
+                    "Pengalaman_Digital": digital
+                }
                 st.session_state.step = 2
                 st.rerun()
+            else:
+                st.warning("Mohon isi Nama/Inisial Anda.")
 
-# ─── STEP 2: PERTANYAAN ──────────────────────────────────────────────────────
+# ==========================================
+# STEP 2: INSTRUMEN
+# ==========================================
 elif st.session_state.step == 2:
-    st.markdown('<div class="step-indicator">TAHAP 2: INSTRUMEN EVALUASI</div>', unsafe_allow_html=True)
-    st.info(f"Halo **{st.session_state.user_data['nama']}**! Mohon isi semua pertanyaan dengan jujur. Pilihan jawabanmu akan tersimpan secara real-time.")
+    st.title("📝 Instrumen Penilain")
+    st.info(f"Responden: **{st.session_state.data_diri['Nama']}**")
     
-    with st.form("main_form", border=False):
-        all_ans = []
-        q_idx = 0
-        for k in KUESIONER:
-            st.markdown(f'<div class="k-header">📋 {k["judul"]}</div>', unsafe_allow_html=True)
-            for s in k["seksi"]:
-                st.markdown(f'<div class="s-header">🔹 {s["nama"]}</div>', unsafe_allow_html=True)
-                for item in s["items"]:
-                    q_idx += 1
-                    st.markdown(f'<div class="item-row"><b>{q_idx}.</b> {item}</div>', unsafe_allow_html=True)
-                    ans = st.radio("Option", list(LIKERT.keys()), key=f"q_{q_idx}", index=None, horizontal=True, label_visibility="collapsed")
-                    all_ans.append({"Kuesioner":k["judul"], "Dimensi":s["nama"], "No":q_idx, "Pernyataan":item, "Jawaban":ans, "Skor":LIKERT[ans] if ans else None})
+    with st.form("survey_form"):
+        # 1. Likert
+        q_count = 1
+        all_scores = []
+        dim_means = {}
+        
+        for dimension, items in KUESIONER.items():
+            st.markdown(f'<div class="dimension-card">{dimension}</div>', unsafe_allow_html=True)
+            dim_scores = []
+            for item in items:
+                key = f"q_{q_count}"
+                val = st.radio(f"{q_count}. {item}", options=[5,4,3,2,1], 
+                               format_func=lambda x: LIKERT_OPTIONS[x], key=key, horizontal=True)
+                st.session_state.responses[key] = val
+                dim_scores.append(val)
+                all_scores.append(val)
+                q_count += 1
+            dim_means[f"Mean_{dimension.split('.')[0]}"] = sum(dim_scores)/len(dim_scores)
 
-        st.markdown('<div class="k-header">✍️ Pendapat Akhir</div>', unsafe_allow_html=True)
-        desc_ans = []
-        for i, q in enumerate(DESKRIPSI):
-            st.markdown(f"**{i+1}. {q}**")
-            txt = st.text_area("Txt", key=f"d_{i}", height=120, placeholder="Tuliskan di sini...", label_visibility="collapsed")
-            desc_ans.append({"No":i+1, "Pertanyaan":q, "Jawaban":txt})
+        # 2. Open Questions
+        st.markdown('<div class="dimension-card">D. PERTANYAAN TERBUKA</div>', unsafe_allow_html=True)
+        for i, q in enumerate(PERTANYAAN_TERBUKA):
+            key = f"essay_{i}"
+            st.session_state.essays[key] = st.text_area(q, key=key)
 
-        c1, c2 = st.columns([1, 2])
-        if c1.form_submit_button("⬅ Kembali"):
+        col1, col2 = st.columns(2)
+        if col1.form_submit_button("⬅ Kembali"):
             st.session_state.step = 1
             st.rerun()
-        if c2.form_submit_button("🚀 Kirim Jawaban", use_container_width=True):
-            missing = [a["No"] for a in all_ans if a["Jawaban"] is None]
-            if missing:
-                st.error(f"⚠️ Ada {len(missing)} soal belum dijawab! Mohon lengkapi semua ya.")
-            else:
-                with st.spinner("Menyimpan ke Spreadsheet..."):
-                    ud = st.session_state.user_data
-                    ok, err = save_to_gsheet(ud['nama'], ud['inst'], ud['wa'], ud['em'], all_ans, desc_ans)
-                    if ok:
-                        st.session_state.step = 3
-                        st.rerun()
-                    else:
-                        st.error(f"Gagal Simpan: {err}")
+        
+        if col2.form_submit_button("🚀 Kirim Evaluasi"):
+            # Prepare Payload
+            payload = st.session_state.data_diri.copy()
+            # Raw Scores
+            for k, v in st.session_state.responses.items():
+                payload[k] = v
+            # Essays
+            for i, q in enumerate(PERTANYAAN_TERBUKA):
+                payload[f"Essay_{i+1}"] = st.session_state.essays.get(f"essay_{i}", "")
+            # Means
+            payload["Overall_Mean"] = sum(all_scores)/len(all_scores)
+            payload.update(dim_means)
+            
+            with st.spinner("Mengirim data..."):
+                if save_to_gsheet(payload):
+                    st.session_state.step = 3
+                    st.rerun()
+                else:
+                    st.error("Gagal mengirim data ke Spreadsheet.")
 
-# ─── STEP 3: SUCCESS ─────────────────────────────────────────────────────────
+# ==========================================
+# STEP 3: SELESAI
+# ==========================================
 elif st.session_state.step == 3:
     st.balloons()
     st.markdown(f"""
-    <div style="background:#f0fdf4; padding:40px; border-radius:24px; border:1px solid #bbf7d0; text-align:center; margin-top:20px;">
-        <h1 style="color:#064e3b; margin-top:0;">✨ Berhasil! ✨</h1>
-        <h2 style="color:#166534;">Terima kasih, {st.session_state.user_data['nama']}!</h2>
-        <p style="color:#166534; font-size:1.2rem;">Data Anda telah tersinkronisasi ke Spreadsheet secara real-time.</p>
-        <div style="font-size: 5rem; margin: 20px 0;">📊</div>
-    </div>
+        <div class="success-card">
+            <h1 style="font-size: 4rem;">🥳</h1>
+            <h1>Terima Kasih, {st.session_state.data_diri['Nama']}!</h1>
+            <p style="font-size: 1.2rem; color: #166534;">Evaluasi Anda terhadap model S-ELT telah kami terima.</p>
+            <p>Data Anda telah tersimpan secara real-time untuk analisis lebih lanjut.</p>
+        </div>
     """, unsafe_allow_html=True)
-    if st.button("Isi Kembali"):
-        st.session_state.step = 1
+    if st.button("Mulai Baru"):
+        for k in list(st.session_state.keys()): del st.session_state[k]
+        st.rerun()
+t.session_state[k]
         st.rerun()
