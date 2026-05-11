@@ -201,7 +201,8 @@ LIKERT_OPTIONS = {
 @st.cache_data
 def get_guide_images():
     imgs = []
-    folder = r"d:\Riset_Prof_Herlina\riset_BIMA\prototype_selt\buku_panduan\gambar_aplikasi"
+    # Menggunakan path relatif agar portable
+    folder = os.path.join(os.path.dirname(__file__), "buku_panduan", "gambar_aplikasi")
     for i in range(1, 20):
         path = os.path.join(folder, f"{i}.png")
         if os.path.exists(path):
