@@ -199,17 +199,12 @@ LIKERT_OPTIONS = {
 }
 
 @st.cache_data
-def get_guide_images():
-    imgs = []
-    # Menggunakan path relatif agar portable
-    folder = os.path.join(os.path.dirname(__file__), "buku_panduan", "gambar_aplikasi")
-    for i in range(1, 20):
-        path = os.path.join(folder, f"{i}.png")
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                data = base64.b64encode(f.read()).decode()
-                imgs.append(f"data:image/png;base64,{data}")
-    return imgs
+def get_pdf_base64():
+    path = r"d:\Riset_Prof_Herlina\riset_BIMA\prototype_selt\buku_panduan\S-ELT_User_Guide.pdf"
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
 
 # ==========================================
 # STATE MANAGEMENT
@@ -238,48 +233,79 @@ def save_to_gsheet(payload):
         return False
 
 # ==========================================
-# STEP 0: BUKU PANDUAN (FLIPBOOK)
+# STEP 0: BUKU PANDUAN (PDF FLIPBOOK)
 # ==========================================
 if st.session_state.step == 0:
-    st.markdown('<div class="hero-section"><h1>📖 Buku Panduan S-ELT</h1><p>Geser atau klik untuk membalik halaman panduan</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-section"><h1>📖 Buku Panduan S-ELT</h1><p>Membaca panduan lengkap langsung dari dokumen PDF asli</p></div>', unsafe_allow_html=True)
     
-    images = get_guide_images()
+    pdf_data = get_pdf_base64()
     
-    if images:
-        # Flipbook HTML Component
-        img_tags = "".join([f'<div class="page"><img src="{img}" style="width:100%; height:100%; object-fit:contain;"></div>' for img in images])
-        
+    if pdf_data:
         html_code = f"""
-        <div id="book-container" style="width: 100%; height: 500px; display: flex; justify-content: center; align-items: center; background: #f1f5f9; border-radius: 15px; overflow: hidden; position: relative;">
-            <div id="flipbook" style="width: 320px; height: 450px;">
-                {img_tags}
-            </div>
+        <div id="book-container" style="width: 100%; height: 600px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b;">⏳ Memuat Halaman PDF...</div>
+            <div id="flipbook" style="display: none; width: 350px; height: 500px;"></div>
         </div>
+        
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+        
         <script>
-            const pageFlip = new St.PageFlip(document.getElementById('flipbook'), {{
-                width: 320,
-                height: 450,
-                size: "fixed",
-                minWidth: 320,
-                maxWidth: 320,
-                minHeight: 450,
-                maxHeight: 450,
-                maxShadowOpacity: 0.5,
-                showCover: true,
-                mobileScrollSupport: false
+            const pdfData = atob("{pdf_data}");
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+            const container = document.getElementById('flipbook');
+            const loading = document.getElementById('loading');
+
+            async function renderPDF() {{
+                const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
+                const pdf = await loadingTask.promise;
+                
+                for (let i = 1; i <= pdf.numPages; i++) {{
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({{scale: 1.5}});
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'page';
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    await page.render({{canvasContext: context, viewport: viewport}}).promise;
+                    container.appendChild(canvas);
+                }}
+
+                loading.style.display = 'none';
+                container.style.display = 'block';
+
+                const pageFlip = new St.PageFlip(container, {{
+                    width: 350,
+                    height: 500,
+                    size: "stretch",
+                    minWidth: 300,
+                    maxWidth: 500,
+                    minHeight: 400,
+                    maxHeight: 700,
+                    maxShadowOpacity: 0.5,
+                    showCover: true,
+                    mobileScrollSupport: true
+                }});
+                pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+            }}
+
+            renderPDF().catch(err => {{
+                loading.innerText = "❌ Gagal merender PDF: " + err.message;
             }});
-            pageFlip.loadFromHTML(document.querySelectorAll('.page'));
         </script>
         <style>
-            .page {{ background-color: white; box-shadow: 0 0 20px rgba(0,0,0,0.1); }}
+            canvas {{ background-color: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 100%; height: 100%; }}
         </style>
         """
-        st.components.v1.html(html_code, height=520)
-        
-        st.info("💡 **Tips Android**: Gunakan satu jari untuk menggeser ujung halaman buku ke kiri atau kanan.")
+        st.components.v1.html(html_code, height=650)
+        st.info("💡 **Tips**: Gunakan fitur geser untuk membalik setiap halaman PDF asli.")
     else:
-        st.error("Gagal memuat gambar panduan. Pastikan folder gambar tersedia.")
+        st.error("File S-ELT_User_Guide.pdf tidak ditemukan di server.")
 
     if st.button("Selesai Membaca & Mulai Mengisi ➔"):
         st.session_state.step = 1
