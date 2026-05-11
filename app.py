@@ -394,5 +394,3 @@ elif st.session_state.step == 3:
     if st.button("Mulai Baru"):
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
-t.session_state[k]
-        st.rerun()
