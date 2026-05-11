@@ -7,7 +7,6 @@ import io
 import requests
 
 # ─── KONSTANTA ───────────────────────────────────────────────────────────────
-# Paste URL Apps Script Web App Anda di sini setelah deploy
 APPS_SCRIPT_URL = st.secrets.get("APPS_SCRIPT_URL", "")
 SHEET_NAME      = "Mahasiswa"
 
@@ -168,6 +167,12 @@ LIKERT = {
     "😠 Tidak Suka": 1
 }
 
+# ─── INITIAL STATE ───────────────────────────────────────────────────────────
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = {}
+
 # ─── GOOGLE SHEETS via APPS SCRIPT ──────────────────────────────────────────
 def build_headers():
     hdrs = ["Timestamp", "Nama", "Institusi", "Kontak", "Email"]
@@ -186,7 +191,6 @@ def build_headers():
     return hdrs
 
 def save_to_gsheet(nama, institusi, kontak, email, answers, deskripsi_list):
-    """Kirim data ke Google Sheet via Apps Script Web App (HTTP POST)."""
     if not APPS_SCRIPT_URL:
         return False, "APPS_SCRIPT_URL belum diisi di secrets."
     try:
@@ -247,6 +251,9 @@ html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
     line-height: 1.5;
 }
 .stRadio > div { gap: 15px; }
+.step-indicator {
+    text-align: center; margin-bottom: 20px; color: #064e3b; font-weight: 800;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -255,155 +262,104 @@ st.markdown("""
 <div class="hero">
   <h1>📝 Angket Respon Mahasiswa</h1>
   <p>Platform Smart-English Language Teaching (S-ELT)</p>
-  <div style="margin-top:15px; background:rgba(255,255,255,0.1); padding:10px; border-radius:12px; font-size:0.9rem;">
-     Pilihlah jawaban yang paling menggambarkan perasaanmu! Tidak ada jawaban salah kok. 😊
-  </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── DATA DIRI ───────────────────────────────────────────────────────────────
-with st.container(border=True):
-    st.markdown("### 👤 Identitas Mahasiswa")
-    c1, c2 = st.columns(2)
-    nama      = c1.text_input("Nama Lengkap *", placeholder="Siapa namamu?")
-    institusi = c2.text_input("Asal Kampus *", placeholder="Nama Universitas/Sekolah")
-    c3, c4    = st.columns(2)
-    kontak    = c3.text_input("No. WhatsApp", placeholder="08xxxxxxxxxx")
-    email     = c4.text_input("Email", placeholder="email@contoh.com")
+# ─── STEP 1: IDENTITAS ───────────────────────────────────────────────────────
+if st.session_state.step == 1:
+    st.markdown('<div class="step-indicator">LANGKAH 1 DARI 2: DATA DIRI</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("### 👤 Identitas Mahasiswa")
+        nama      = st.text_input("Nama Lengkap *", placeholder="Siapa namamu?")
+        institusi = st.text_input("Asal Kampus *", placeholder="Nama Universitas/Sekolah")
+        c1, c2    = st.columns(2)
+        kontak    = c1.text_input("No. WhatsApp", placeholder="08xxxxxxxxxx")
+        email     = c2.text_input("Email", placeholder="email@contoh.com")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Lanjutkan ke Pertanyaan ➔", use_container_width=True):
+            if not nama.strip() or not institusi.strip():
+                st.warning("⚠️ Mohon lengkapi Nama dan Kampus terlebih dahulu ya!")
+            else:
+                st.session_state.user_data = {
+                    "nama": nama,
+                    "institusi": institusi,
+                    "kontak": kontak,
+                    "email": email
+                }
+                st.session_state.step = 2
+                st.rerun()
 
-st.markdown("---")
+# ─── STEP 2: PERTANYAAN ──────────────────────────────────────────────────────
+elif st.session_state.step == 2:
+    st.markdown(f'<div class="step-indicator">LANGKAH 2 DARI 2: INSTRUMEN EVALUASI</div>', unsafe_allow_html=True)
+    st.info(f"Halo **{st.session_state.user_data['nama']}**! Silakan isi semua pertanyaan di bawah ini dengan jujur ya. 😊")
+    
+    with st.form("form_pertanyaan", border=False):
+        all_answers = []
+        global_num  = 0
 
-# ─── FORM ────────────────────────────────────────────────────────────────────
-with st.form("form_mahasiswa", border=False):
-    all_answers = []
-    global_num  = 0
+        for k in KUESIONER:
+            st.markdown(f'<div class="k-header">📋 {k["judul"]}</div>', unsafe_allow_html=True)
+            for s in k["seksi"]:
+                st.markdown(f'<div class="s-header">🔹 {s["nama"]}</div>', unsafe_allow_html=True)
+                for item in s["items"]:
+                    global_num += 1
+                    st.markdown(f'<div class="item-row"><b>{global_num}.</b> {item}</div>', unsafe_allow_html=True)
+                    jawaban = st.radio("", list(LIKERT.keys()), key=f"q_{global_num}", index=None, horizontal=True, label_visibility="collapsed")
+                    all_answers.append({
+                        "Kuesioner": k["judul"],
+                        "Dimensi":   s["nama"],
+                        "No":        global_num,
+                        "Pernyataan": item,
+                        "Jawaban":   jawaban,
+                        "Skor":      LIKERT[jawaban] if jawaban else None,
+                    })
 
-    for k in KUESIONER:
-        st.markdown(f'<div class="k-header">📋 {k["judul"]}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="k-header">✍️ Berikan Pendapatmu</div>', unsafe_allow_html=True)
+        deskripsi_list = []
+        for i, q in enumerate(DESKRIPSI):
+            st.markdown(f"**{i+1}. {q}**")
+            ans = st.text_area("", key=f"desc_{i}", height=120, placeholder="Tuliskan pendapatmu di sini ya...", label_visibility="collapsed")
+            deskripsi_list.append({"No": i+1, "Pertanyaan": q, "Jawaban": ans})
 
-        for s in k["seksi"]:
-            st.markdown(f'<div class="s-header">🔹 {s["nama"]}</div>', unsafe_allow_html=True)
-            for item in s["items"]:
-                global_num += 1
-                st.markdown(f'<div class="item-row"><b>{global_num}.</b> {item}</div>',
-                            unsafe_allow_html=True)
-                jawaban = st.radio("", list(LIKERT.keys()),
-                                   key=f"q_{global_num}", index=None,
-                                   horizontal=True, label_visibility="collapsed")
-                all_answers.append({
-                    "Kuesioner": k["judul"],
-                    "Dimensi":   s["nama"],
-                    "No":        global_num,
-                    "Pernyataan": item,
-                    "Jawaban":   jawaban,
-                    "Skor":      LIKERT[jawaban] if jawaban else None,
-                })
+        st.markdown("<br>", unsafe_allow_html=True)
+        c1, c2 = st.columns([1, 2])
+        if c1.form_submit_button("⬅ Kembali"):
+            st.session_state.step = 1
+            st.rerun()
+            
+        submitted = c2.form_submit_button("🚀 Kirim Jawaban Sekarang", use_container_width=True)
 
-    # Deskripsi Pengalaman
-    st.markdown('<div class="k-header">✍️ Berikan Pendapatmu</div>', unsafe_allow_html=True)
-    deskripsi_list = []
-    for i, q in enumerate(DESKRIPSI):
-        st.markdown(f"**{i+1}. {q}**")
-        ans = st.text_area("", key=f"desc_{i}", height=120,
-                           placeholder="Tuliskan pendapatmu di sini ya...",
-                           label_visibility="collapsed")
-        deskripsi_list.append({"No": i+1, "Pertanyaan": q, "Jawaban": ans})
+    if submitted:
+        belum_dijawab = [a["No"] for a in all_answers if a["Jawaban"] is None]
+        if belum_dijawab:
+            st.error(f"⚠️ Masih ada **{len(belum_dijawab)} soal** yang terlewat! Yuk, lengkapi dulu semua jawabanmu.")
+        else:
+            with st.spinner("⏳ Mengirim jawabanmu ke server..."):
+                ud = st.session_state.user_data
+                ok, err = save_to_gsheet(ud['nama'], ud['institusi'], ud['kontak'], ud['email'], all_answers, deskripsi_list)
+                
+                if ok:
+                    st.session_state.step = 3
+                    st.rerun()
+                else:
+                    st.error(f"⚠️ Aduh, gagal menyimpan: {err}")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    submitted = st.form_submit_button("🚀 Kirim Jawaban Sekarang", use_container_width=True)
-
-# ─── SIMPAN & TAMPILKAN HASIL ────────────────────────────────────────────────
-if submitted:
-    if not nama.strip():
-        st.warning("⚠️ Eh, namamu belum diisi nih!")
-        st.stop()
-
-    # Cek semua pertanyaan sudah dijawab
-    belum_dijawab = [a["No"] for a in all_answers if a["Jawaban"] is None]
-    if belum_dijawab:
-        st.error(f"⚠️ Masih ada **{len(belum_dijawab)} soal** yang terlewat! "
-                 f"(No: {', '.join(str(n) for n in belum_dijawab[:10])}"
-                 f"{'...' if len(belum_dijawab) > 10 else ''}). "
-                 "Yuk, dijawab dulu semuanya.")
-        st.stop()
-
-    # Simpan ke Google Sheets
-    with st.spinner("⏳ Menghubungkan ke server..."):
-        ok, err = save_to_gsheet(nama, institusi, kontak, email,
-                                  all_answers, deskripsi_list)
-
-    if ok:
-        st.balloons()
-        st.success(f"✨ Hore! Terima kasih banyak, **{nama}**! Jawabanmu sudah kami terima dengan aman.")
-        st.markdown("""
-        <div style="background:#f0fdf4; padding:20px; border-radius:15px; border:1px solid #bbf7d0; text-align:center; margin-top:20px;">
-            <h2 style="color:#166534; margin-top:0;">🙏 Terimakasih!</h2>
-            <p style="color:#166534; font-size:1.1rem;">Partisipasimu sangat membantu perkembangan platform S-ELT menjadi lebih baik lagi.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.warning(f"⚠️ Aduh, ada sedikit kendala: {err}\n\n"
-                   "Tapi tenang, kamu masih bisa mengunduh hasilnya dalam bentuk Excel di bawah ini.")
-
-    # Visualisasi
-    df = pd.DataFrame(all_answers)
-    overall = df["Skor"].mean()
-
-    def kategori(m):
-        if m < 1.8: return "Sangat Rendah"
-        if m < 2.6: return "Rendah"
-        if m < 3.4: return "Sedang"
-        if m < 4.2: return "Tinggi"
-        return "Sangat Tinggi"
-
-    st.markdown("---")
-    st.subheader("📊 Ringkasan Hasil Anda")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Rata-rata Keseluruhan", f"{overall:.2f} / 5.00")
-    m2.metric("Total Pernyataan", len(df))
-    m3.metric("Kategori", kategori(overall))
-
-    by_dim = df.groupby("Dimensi")["Skor"].mean().reset_index()
-    by_dim.columns = ["Dimensi", "Rata-rata"]
-    fig1 = px.bar(by_dim, x="Rata-rata", y="Dimensi", orientation="h",
-                  color="Rata-rata",
-                  color_continuous_scale=["#ef4444","#eab308","#3b82f6"],
-                  range_color=[1, 5], text="Rata-rata",
-                  title="Rata-rata Skor per Dimensi")
-    fig1.update_traces(texttemplate="%{text:.2f}", textposition="outside")
-    fig1.update_layout(height=max(350, len(by_dim)*44),
-                       plot_bgcolor="white", paper_bgcolor="white",
-                       coloraxis_showscale=False,
-                       margin=dict(l=0, r=50, t=50, b=20))
-    fig1.update_xaxes(range=[0, 5.8])
-    st.plotly_chart(fig1, use_container_width=True)
-
-    dist  = df["Skor"].value_counts().sort_index()
-    label_map = {1:"😠",2:"🙁",3:"😐",4:"🙂",5:"🤩"}
-    fig2  = go.Figure(go.Pie(
-        labels=[label_map[i] for i in dist.index], values=dist.values,
-        marker_colors=["#ef4444","#f97316","#eab308","#22c55e","#3b82f6"],
-        hole=0.5, textinfo="label+percent"))
-    fig2.update_layout(title="Distribusi Jawaban",
-                       height=320, margin=dict(t=50,b=0,l=0,r=0))
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # Backup Excel
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    buf  = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        pd.DataFrame([{"Nama": nama, "Institusi": institusi,
-                        "Kontak": kontak, "Email": email,
-                        "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}]
-                     ).to_excel(writer, sheet_name="Identitas", index=False)
-        df.to_excel(writer, sheet_name="Data Jawaban", index=False)
-        summary = df.groupby(["Kuesioner","Dimensi"])["Skor"].agg(
-            Rata_rata="mean", Jumlah="count", Std_Dev="std").reset_index()
-        summary.to_excel(writer, sheet_name="Ringkasan", index=False)
-        pd.DataFrame(deskripsi_list).to_excel(writer, sheet_name="Deskripsi", index=False)
-
-    st.download_button("⬇️ Unduh Salinan Hasil (Excel)",
-                       data=buf.getvalue(),
-                       file_name=f"Mahasiswa_{nama.replace(' ','_')}_{ts}.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                       use_container_width=True)
+# ─── STEP 3: TERIMA KASIH ────────────────────────────────────────────────────
+elif st.session_state.step == 3:
+    st.balloons()
+    st.markdown(f"""
+    <div style="background:#f0fdf4; padding:40px; border-radius:24px; border:1px solid #bbf7d0; text-align:center; margin-top:20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+        <h1 style="color:#064e3b; margin-top:0;">✨ Hore! ✨</h1>
+        <h2 style="color:#166534;">Terima kasih, {st.session_state.user_data['nama']}!</h2>
+        <p style="color:#166534; font-size:1.2rem; opacity:0.8;">Jawabanmu sudah kami terima dengan aman.</p>
+        <div style="font-size: 5rem; margin: 20px 0;">🎉</div>
+        <p style="color:#064e3b; font-weight: 600;">Partisipasimu sangat berarti bagi pengembangan platform S-ELT.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("Isi Kembali untuk Mahasiswa Lain"):
+        st.session_state.step = 1
+        st.session_state.user_data = {}
+        st.rerun()
