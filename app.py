@@ -237,15 +237,20 @@ def save_to_gsheet(payload):
 # STEP 0: BUKU PANDUAN (PDF FLIPBOOK)
 # ==========================================
 if st.session_state.step == 0:
-    st.markdown('<div class="hero-section"><h1>📖 Buku Panduan S-ELT</h1><p>Membaca panduan lengkap langsung dari dokumen PDF asli</p></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div style="text-align:center; margin-bottom:15px;">
+            <h2 style="margin:0; color:#064e3b;">📖 Buku Panduan S-ELT</h2>
+            <p style="font-size:0.9rem; color:#666;">Baca panduan sebelum mengisi kuesioner</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     pdf_data = get_pdf_base64()
     
     if pdf_data:
         html_code = f"""
-        <div id="book-container" style="width: 100%; height: 600px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b;">⏳ Memuat Halaman PDF...</div>
-            <div id="flipbook" style="display: none; width: 350px; height: 500px;"></div>
+        <div id="book-container" style="width: 100%; height: 450px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b; font-size: 0.8rem;">⏳ Memuat Panduan...</div>
+            <div id="flipbook" style="display: none; width: 280px; height: 400px;"></div>
         </div>
         
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
@@ -265,7 +270,7 @@ if st.session_state.step == 0:
                 
                 for (let i = 1; i <= pdf.numPages; i++) {{
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({{scale: 1.5}});
+                    const viewport = page.getViewport({{scale: 1.2}});
                     
                     const canvas = document.createElement('canvas');
                     canvas.className = 'page';
@@ -281,34 +286,33 @@ if st.session_state.step == 0:
                 container.style.display = 'block';
 
                 const pageFlip = new St.PageFlip(container, {{
-                    width: 350,
-                    height: 500,
+                    width: 280,
+                    height: 400,
                     size: "stretch",
-                    minWidth: 300,
-                    maxWidth: 500,
-                    minHeight: 400,
-                    maxHeight: 700,
+                    minWidth: 250,
+                    maxWidth: 350,
+                    minHeight: 350,
+                    maxHeight: 500,
                     maxShadowOpacity: 0.5,
                     showCover: true,
-                    mobileScrollSupport: true
+                    mobileScrollSupport: false
                 }});
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
             }}
 
             renderPDF().catch(err => {{
-                loading.innerText = "❌ Gagal merender PDF: " + err.message;
+                loading.innerText = "❌ Gagal: " + err.message;
             }});
         </script>
         <style>
             canvas {{ background-color: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 100%; height: 100%; }}
         </style>
         """
-        st.components.v1.html(html_code, height=650)
-        st.info("💡 **Tips**: Gunakan fitur geser untuk membalik setiap halaman PDF asli.")
+        st.components.v1.html(html_code, height=460)
     else:
-        st.error("File S-ELT_User_Guide.pdf tidak ditemukan di server.")
+        st.error("File PDF tidak ditemukan.")
 
-    if st.button("Selesai Membaca & Mulai Mengisi ➔"):
+    if st.button("🚀 SELESAI MEMBACA & ISI BIODATA", type="primary", use_container_width=True):
         st.session_state.step = 1
         st.rerun()
 
