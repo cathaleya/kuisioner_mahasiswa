@@ -200,7 +200,8 @@ LIKERT_OPTIONS = {
 
 @st.cache_data
 def get_pdf_base64():
-    path = r"d:\Riset_Prof_Herlina\riset_BIMA\prototype_selt\buku_panduan\S-ELT_User_Guide.pdf"
+    # Menggunakan path relatif agar file bisa terbaca di server/cloud
+    path = os.path.join(os.path.dirname(__file__), "buku_panduan", "S-ELT_User_Guide.pdf")
     if os.path.exists(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
