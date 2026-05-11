@@ -248,21 +248,29 @@ if st.session_state.step == 0:
     
     if pdf_data:
         html_code = f"""
-        <div id="book-container" style="width: 100%; height: 450px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div id="book-container" style="width: 100%; height: 480px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
             <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b; font-size: 0.8rem;">⏳ Memuat Panduan...</div>
             <div id="flipbook" style="display: none; width: 280px; height: 400px;"></div>
+            
+            <!-- Tombol Navigasi Internal -->
+            <div id="nav-controls" style="display: none; margin-top: 10px; gap: 20px;">
+                <button onclick="pageFlip.flipPrev()" style="padding: 8px 15px; border-radius: 8px; border: 1px solid #10b981; background: white; color: #10b981; font-weight: bold; cursor: pointer;">⬅ SBLM</button>
+                <button onclick="pageFlip.flipNext()" style="padding: 8px 15px; border-radius: 8px; border: none; background: #10b981; color: white; font-weight: bold; cursor: pointer;">SLANJ ➡</button>
+            </div>
         </div>
         
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
         
         <script>
+            let pageFlip;
             const pdfData = atob("{pdf_data}");
             const pdfjsLib = window['pdfjs-dist/build/pdf'];
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
             const container = document.getElementById('flipbook');
             const loading = document.getElementById('loading');
+            const controls = document.getElementById('nav-controls');
 
             async function renderPDF() {{
                 const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
@@ -284,8 +292,9 @@ if st.session_state.step == 0:
 
                 loading.style.display = 'none';
                 container.style.display = 'block';
+                controls.style.display = 'flex';
 
-                const pageFlip = new St.PageFlip(container, {{
+                pageFlip = new St.PageFlip(container, {{
                     width: 280,
                     height: 400,
                     size: "stretch",
@@ -295,7 +304,8 @@ if st.session_state.step == 0:
                     maxHeight: 500,
                     maxShadowOpacity: 0.5,
                     showCover: true,
-                    mobileScrollSupport: false
+                    mobileScrollSupport: true,
+                    clickEventForward: true
                 }});
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
             }}
