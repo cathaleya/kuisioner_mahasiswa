@@ -223,14 +223,16 @@ if 'essays' not in st.session_state:
 # FUNCTIONS
 # ==========================================
 def save_to_gsheet(payload):
-    url = st.secrets.get("APPS_SCRIPT_URL", "")
+    # Mencari URL di secrets dengan nama 'spreadsheet' atau 'APPS_SCRIPT_URL'
+    url = st.secrets.get("spreadsheet", st.secrets.get("APPS_SCRIPT_URL", ""))
     if not url:
-        st.error("Konfigurasi APPS_SCRIPT_URL tidak ditemukan!")
+        st.error("Konfigurasi URL Spreadsheet tidak ditemukan di Secrets!")
         return False
     try:
         res = requests.post(url, json=payload, timeout=15)
         return res.status_code == 200
-    except:
+    except Exception as e:
+        st.error(f"Terjadi kesalahan teknis: {str(e)}")
         return False
 
 # ==========================================
@@ -248,14 +250,15 @@ if st.session_state.step == 0:
     
     if pdf_data:
         html_code = f"""
-        <div id="book-container" style="width: 100%; height: 480px; background: #f1f5f9; border-radius: 15px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
-            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b; font-size: 0.8rem;">⏳ Memuat Panduan...</div>
-            <div id="flipbook" style="display: none; width: 280px; height: 400px;"></div>
+        <div id="book-container" style="width: 100%; height: 550px; background: #f1f5f9; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 20px 0;">
+            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b; font-size: 0.9rem;">⏳ Memuat Panduan Lengkap...</div>
             
-            <!-- Tombol Navigasi Internal -->
-            <div id="nav-controls" style="display: none; margin-top: 10px; gap: 20px;">
-                <button onclick="pageFlip.flipPrev()" style="padding: 8px 15px; border-radius: 8px; border: 1px solid #10b981; background: white; color: #10b981; font-weight: bold; cursor: pointer;">⬅ SBLM</button>
-                <button onclick="pageFlip.flipNext()" style="padding: 8px 15px; border-radius: 8px; border: none; background: #10b981; color: white; font-weight: bold; cursor: pointer;">SLANJ ➡</button>
+            <div id="flipbook" style="display: none; width: 260px; height: 380px; margin: 20px auto;"></div>
+            
+            <!-- Tombol Navigasi Internal - Jelas & Tidak Mepet -->
+            <div id="nav-controls" style="display: none; margin-top: 30px; gap: 30px; z-index: 100;">
+                <button onclick="pageFlip.flipPrev()" style="padding: 12px 20px; border-radius: 12px; border: 2px solid #10b981; background: white; color: #10b981; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">< Kembali</button>
+                <button onclick="pageFlip.flipNext()" style="padding: 12px 20px; border-radius: 12px; border: none; background: #10b981; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(16,185,129,0.3);">Lanjut ></button>
             </div>
         </div>
         
@@ -273,52 +276,57 @@ if st.session_state.step == 0:
             const controls = document.getElementById('nav-controls');
 
             async function renderPDF() {{
-                const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
-                const pdf = await loadingTask.promise;
-                
-                for (let i = 1; i <= pdf.numPages; i++) {{
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({{scale: 1.2}});
+                try {{
+                    const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
+                    const pdf = await loadingTask.promise;
                     
-                    const canvas = document.createElement('canvas');
-                    canvas.className = 'page';
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    
-                    await page.render({{canvasContext: context, viewport: viewport}}).promise;
-                    container.appendChild(canvas);
+                    for (let i = 1; i <= pdf.numPages; i++) {{
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({{scale: 1.0}}); // Skala 1.0 agar pas
+                        
+                        const canvas = document.createElement('canvas');
+                        canvas.className = 'page';
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        await page.render({{canvasContext: context, viewport: viewport}}).promise;
+                        container.appendChild(canvas);
+                    }}
+
+                    loading.style.display = 'none';
+                    container.style.display = 'block';
+                    controls.style.display = 'flex';
+
+                    pageFlip = new St.PageFlip(container, {{
+                        width: 260,
+                        height: 380,
+                        size: "stretch",
+                        minWidth: 200,
+                        maxWidth: 300,
+                        minHeight: 300,
+                        maxHeight: 450,
+                        maxShadowOpacity: 0.5,
+                        showCover: true,
+                        mobileScrollSupport: true,
+                        clickEventForward: true,
+                        usePortrait: true,
+                        startPage: 0
+                    }});
+                    pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+                }} catch (e) {{
+                    loading.innerText = "Error: " + e.message;
                 }}
-
-                loading.style.display = 'none';
-                container.style.display = 'block';
-                controls.style.display = 'flex';
-
-                pageFlip = new St.PageFlip(container, {{
-                    width: 280,
-                    height: 400,
-                    size: "stretch",
-                    minWidth: 250,
-                    maxWidth: 350,
-                    minHeight: 350,
-                    maxHeight: 500,
-                    maxShadowOpacity: 0.5,
-                    showCover: true,
-                    mobileScrollSupport: true,
-                    clickEventForward: true
-                }});
-                pageFlip.loadFromHTML(document.querySelectorAll('.page'));
             }}
 
-            renderPDF().catch(err => {{
-                loading.innerText = "❌ Gagal: " + err.message;
-            }});
+            renderPDF();
         </script>
         <style>
-            canvas {{ background-color: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 100%; height: 100%; }}
+            .page {{ background-color: white; box-shadow: 0 0 15px rgba(0,0,0,0.1); width: 100%; height: 100%; }}
+            button:active {{ transform: scale(0.95); opacity: 0.8; }}
         </style>
         """
-        st.components.v1.html(html_code, height=460)
+        st.components.v1.html(html_code, height=600)
     else:
         st.error("File PDF tidak ditemukan.")
 
@@ -375,19 +383,28 @@ elif st.session_state.step == 2:
         q_count = 1
         all_scores = []
         dim_means = {}
+        unanswered = []
         
         for dimension, items in KUESIONER.items():
             st.markdown(f'<div class="dimension-card">{dimension}</div>', unsafe_allow_html=True)
             dim_scores = []
             for item in items:
                 key = f"q_{q_count}"
+                # Set index=None agar tidak ada jawaban yang terpilih otomatis
                 val = st.radio(f"{q_count}. {item}", options=[5,4,3,2,1], 
-                               format_func=lambda x: LIKERT_OPTIONS[x], key=key, horizontal=True)
-                st.session_state.responses[key] = val
-                dim_scores.append(val)
-                all_scores.append(val)
+                               format_func=lambda x: LIKERT_OPTIONS[x], 
+                               key=key, horizontal=True, index=None)
+                
+                if val is not None:
+                    st.session_state.responses[key] = val
+                    dim_scores.append(val)
+                    all_scores.append(val)
+                else:
+                    unanswered.append(q_count)
                 q_count += 1
-            dim_means[f"Mean_{dimension.split('.')[0]}"] = sum(dim_scores)/len(dim_scores)
+            
+            if dim_scores:
+                dim_means[f"Mean_{dimension.split('.')[0]}"] = sum(dim_scores)/len(dim_scores)
 
         # 2. Open Questions
         st.markdown('<div class="dimension-card">D. PERTANYAAN TERBUKA</div>', unsafe_allow_html=True)
@@ -401,24 +418,27 @@ elif st.session_state.step == 2:
             st.rerun()
         
         if col2.form_submit_button("🚀 Kirim Evaluasi"):
-            # Prepare Payload
-            payload = st.session_state.data_diri.copy()
-            # Raw Scores
-            for k, v in st.session_state.responses.items():
-                payload[k] = v
-            # Essays
-            for i, q in enumerate(PERTANYAAN_TERBUKA):
-                payload[f"Essay_{i+1}"] = st.session_state.essays.get(f"essay_{i}", "")
-            # Means
-            payload["Overall_Mean"] = sum(all_scores)/len(all_scores)
-            payload.update(dim_means)
-            
-            with st.spinner("Mengirim data..."):
-                if save_to_gsheet(payload):
-                    st.session_state.step = 3
-                    st.rerun()
-                else:
-                    st.error("Gagal mengirim data ke Spreadsheet.")
+            if unanswered:
+                st.error(f"Mohon lengkapi semua pertanyaan! (Nomor yang belum diisi: {unanswered[:10]}{'...' if len(unanswered)>10 else ''})")
+            else:
+                # Prepare Payload
+                payload = st.session_state.data_diri.copy()
+                # Raw Scores
+                for k, v in st.session_state.responses.items():
+                    payload[k] = v
+                # Essays
+                for i, q in enumerate(PERTANYAAN_TERBUKA):
+                    payload[f"Essay_{i+1}"] = st.session_state.essays.get(f"essay_{i}", "")
+                # Means
+                payload["Overall_Mean"] = sum(all_scores)/len(all_scores)
+                payload.update(dim_means)
+                
+                with st.spinner("Mengirim data..."):
+                    if save_to_gsheet(payload):
+                        st.session_state.step = 3
+                        st.rerun()
+                    else:
+                        st.error("Gagal mengirim data ke Spreadsheet.")
 
 # ==========================================
 # STEP 3: SELESAI
