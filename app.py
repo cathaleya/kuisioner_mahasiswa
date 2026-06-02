@@ -1,180 +1,472 @@
 import streamlit as st
-import json
 import pandas as pd
 import requests
+import datetime
+import base64
 import os
-from datetime import datetime
 
-# Set Page Config
-st.set_page_config(page_title="SJT Adaptive Thinking English - PGSD", layout="centered")
+# ==========================================
+# CONFIG & STYLES
+# ==========================================
+st.set_page_config(page_title="Instrumen Evaluasi S-ELT", page_icon="🎓", layout="centered")
 
-# Get absolute path of the current directory
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-QUESTIONS_PATH = os.path.join(CURRENT_DIR, "questions.json")
+def local_css():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    
+    .main {
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    }
+    
+    .stApp {
+        background-color: #ffffff;
+    }
 
-# Load Questions
-if not os.path.exists(QUESTIONS_PATH):
-    st.error(f"File '{QUESTIONS_PATH}' tidak ditemukan. Pastikan file pertanyaan sudah diunggah.")
-    st.stop()
+    div[data-testid="stForm"] {
+        border: none;
+        padding: 0;
+    }
+    
+    .stRadio > div {
+        background: #f8fafc;
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .stRadio > div:hover {
+        border-color: #10b981;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.05);
+    }
+    
+    h1, h2, h3 { color: #064e3b; font-weight: 800; }
+    
+    .stButton > button {
+        width: 100%;
+        background-color: #10b981 !important;
+        color: white !important;
+        border-radius: 12px;
+        padding: 15px;
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stButton > button:hover {
+        background-color: #059669 !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
 
-with open(QUESTIONS_PATH, "r", encoding="utf-8") as f:
-    questions = json.load(f)
+    .hero-section {
+        background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);
+        padding: 40px 20px;
+        border-radius: 20px;
+        color: white;
+        text-align: center;
+        margin-bottom: 30px;
+    }
 
-# Initialize Session State
-if "page" not in st.session_state:
-    st.session_state.page = "biodata"
-if "answers" not in st.session_state:
-    st.session_state.answers = {}
-if "user_data" not in st.session_state:
-    st.session_state.user_data = {}
+    .dimension-card {
+        background: #ecfdf5;
+        padding: 10px 20px;
+        border-radius: 10px;
+        border-left: 5px solid #10b981;
+        margin: 25px 0 15px 0;
+        font-weight: bold;
+        color: #064e3b;
+    }
+    
+    .success-card {
+        background: #f0fdf4;
+        padding: 40px;
+        border-radius: 24px;
+        text-align: center;
+        border: 2px solid #bbf7d0;
+    }
 
-# Helper Function to Save via Apps Script
-def save_via_apps_script(data):
+    /* Flipbook Mobile Optimization */
+    .flipbook-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+        aspect-ratio: 3/4;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+local_css()
+
+# ==========================================
+# DATA & IMAGE LOADING
+# ==========================================
+KUESIONER = {
+    "1. SINTAKS (SYNTAX)": [
+        "Alur pembelajaran S-ELT jelas dan mudah diikuti",
+        "Tahapan pembelajaran tersusun sistematis",
+        "Urutan kegiatan menunjukkan hubungan yang logis",
+        "Setiap tahap memiliki tujuan yang jelas",
+        "Tahap decomposition terlihat dalam sintaks",
+        "Tahap pattern recognition terintegrasi",
+        "Tahap abstraction membantu pemahaman",
+        "Tahap algorithmic thinking muncul dalam aktivitas",
+        "Gamifikasi terintegrasi dalam sintaks",
+        "Sintaks memungkinkan pembelajaran adaptif",
+        "Terdapat mekanisme pengulangan (loop learning)",
+        "Sintaks dapat diterapkan dalam kelas nyata"
+    ],
+    "2. SISTEM SOSIAL (SOCIAL SYSTEM)": [
+        "Model mendorong mahasiswa aktif belajar",
+        "Mahasiswa terlibat dalam proses analisis",
+        "Mahasiswa berpikir mandiri dalam menyelesaikan tugas",
+        "Peran dosen sebagai fasilitator sudah tepat",
+        "Dosen tidak mendominasi pembelajaran",
+        "Interaksi mahasiswa dengan sistem berjalan baik",
+        "Interaksi sosial antar mahasiswa terjadi",
+        "Model mendukung pembelajaran mandiri",
+        "Mahasiswa dapat mengontrol proses belajar sendiri",
+        "Model menciptakan suasana belajar interaktif"
+    ],
+    "3. PRINSIP REAKSI (PRINCIPLES OF REACTION)": [
+        "Sistem memberikan umpan balik secara langsung",
+        "Feedback membantu memahami kesalahan",
+        "Respons sistem sesuai kemampuan mahasiswa",
+        "Sistem memberikan petunjuk (hint) saat salah",
+        "Dosen memberikan arahan tanpa langsung memberi jawaban",
+        "Dosen mendorong mahasiswa berpikir",
+        "Feedback sistem bersifat jelas dan mudah dipahami",
+        "Respons pembelajaran bersifat adaptif"
+    ],
+    "4. SISTEM PENDUKUNG (SUPPORT SYSTEM)": [
+        "Aplikasi Android mudah digunakan",
+        "Tampilan aplikasi menarik",
+        "Navigasi sistem mudah dipahami",
+        "Materi pembelajaran sesuai kebutuhan",
+        "Materi terintegrasi dengan Computational Thinking",
+        "Fitur aplikasi mendukung pembelajaran",
+        "Sistem mendukung pembelajaran interaktif",
+        "Dosen mampu menggunakan model dengan baik",
+        "Infrastruktur mendukung implementasi"
+    ],
+    "5. GAMIFIKASI & ALGORITMA": [
+        "Sistem gamifikasi meningkatkan motivasi belajar",
+        "Level dan reward mendorong partisipasi",
+        "Aktivitas game tidak mengganggu tujuan belajar",
+        "Sistem adaptif bekerja dengan baik",
+        "Algoritma menentukan jalur belajar secara tepat",
+        "Gamifikasi meningkatkan keterlibatan mahasiswa",
+        "Sistem memberi pengalaman belajar yang menyenangkan"
+    ],
+    "6. DAMPAK INSTRUKSIONAL": [
+        "Model meningkatkan kemampuan grammar",
+        "Model meningkatkan vocabulary",
+        "Model meningkatkan speaking ability",
+        "Model meningkatkan pemahaman teks",
+        "Model meningkatkan kemampuan berpikir logis",
+        "Model meningkatkan kemampuan problem solving",
+        "Model meningkatkan Computational Thinking"
+    ],
+    "7. DAMPAK PENGIRING (NURTURANT EFFECTS)": [
+        "Model meningkatkan kemandirian belajar",
+        "Model meningkatkan motivasi belajar",
+        "Model meningkatkan kepercayaan diri",
+        "Model meningkatkan keterampilan berpikir kritis",
+        "Model meningkatkan literasi digital",
+        "Model meningkatkan kemampuan adaptasi belajar"
+    ]
+}
+
+PERTANYAAN_TERBUKA = [
+    "Apa keunggulan utama Smart- English Language Teaching (S- ELT)?",
+    "Apa kelemahan model Smart- English Language Teaching (S- ELT) ini?",
+    "Apa yang perlu diperbaiki dari model Smart- English Language Teaching (S- ELT)?",
+    "Apakah model Smart- English Language Teaching (S- ELT) ini cocok untuk calon guru SD? Jelaskan!",
+    "Bagaimana pengalaman Anda menggunakan model Smart- English Language Teaching (S- ELT) ini?"
+]
+
+LIKERT_OPTIONS = {
+    5: "🤩 Sangat Setuju",
+    4: "🙂 Setuju",
+    3: "😐 Cukup",
+    2: "☹️ Tidak Setuju",
+    1: "😡 Sangat Tidak Setuju"
+}
+
+@st.cache_data
+def get_pdf_base64():
+    # Menggunakan path relatif agar file bisa terbaca di server/cloud
+    path = os.path.join(os.path.dirname(__file__), "buku_panduan", "S-ELT_User_Guide.pdf")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
+
+# ==========================================
+# STATE MANAGEMENT
+# ==========================================
+if 'step' not in st.session_state:
+    st.session_state.step = 0 # Mulai dari Panduan
+if 'data_diri' not in st.session_state:
+    st.session_state.data_diri = {}
+if 'responses' not in st.session_state:
+    st.session_state.responses = {}
+if 'essays' not in st.session_state:
+    st.session_state.essays = {}
+
+# ==========================================
+# FUNCTIONS
+# ==========================================
+def save_to_gsheet(payload):
+    # Mencari URL di secrets dengan nama 'spreadsheet' atau 'APPS_SCRIPT_URL'
+    url = st.secrets.get("spreadsheet", st.secrets.get("APPS_SCRIPT_URL", ""))
+    if not url:
+        st.error("Konfigurasi URL Spreadsheet tidak ditemukan di Secrets!")
+        return False
     try:
-        url = None
-        # Cek beberapa kemungkinan struktur secrets
-        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        elif "gsheets_url" in st.secrets:
-            url = st.secrets["gsheets_url"]
-        elif "spreadsheet" in st.secrets:
-            url = st.secrets["spreadsheet"]
-
-        if url:
-            # Detect if it's an Apps Script URL
-            if "script.google.com" in url:
-                response = requests.post(url, json=data)
-                if response.status_code == 200:
-                    try:
-                        res_json = response.json()
-                        if res_json.get("result") == "success":
-                            return True
-                        else:
-                            st.error(f"Error dari Apps Script: {res_json.get('message', 'Gagal menyimpan data')}")
-                            return False
-                    except Exception:
-                        # Fallback jika respons bukan JSON
-                        return True
-                else:
-                    st.error(f"Error dari Apps Script (Status {response.status_code}): {response.text}")
-                    return False
+        # Memformat payload agar sesuai dengan Apps Script yang menerima: sheet, headers, row
+        formatted_payload = {
+            "sheet": "Mahasiswa",
+            "headers": list(payload.keys()),
+            "row": list(payload.values())
+        }
+        res = requests.post(url, json=formatted_payload, timeout=15)
+        if res.status_code == 200:
+            result = res.json()
+            if result.get("status") == "ok":
+                return True
             else:
-                st.error("URL yang dimasukkan bukan URL Google Apps Script yang valid.")
+                st.error(f"Error dari Apps Script: {result.get('message')}")
                 return False
-        else:
-            st.error("Konfigurasi URL tidak ditemukan di Secrets Streamlit Cloud.")
-            st.info("Pastikan Anda sudah menambahkan [connections.gsheets] spreadsheet = 'URL' di bagian Secrets.")
-            return False
+        return False
     except Exception as e:
-        st.error(f"Gagal koneksi ke server: {e}")
+        st.error(f"Terjadi kesalahan teknis: {str(e)}")
         return False
 
-# --- PAGE: BIODATA ---
-if st.session_state.page == "biodata":
-    st.title("📋 Biodata Peserta")
-    st.info("Silakan lengkapi data diri Anda sebelum memulai kuisioner SJT.")
+
+# ==========================================
+# STEP 0: BUKU PANDUAN (PDF FLIPBOOK)
+# ==========================================
+if st.session_state.step == 0:
+    st.markdown("""
+        <div style="text-align:center; margin-bottom:15px;">
+            <h2 style="margin:0; color:#064e3b;">📖 Buku Panduan S-ELT</h2>
+            <p style="font-size:0.9rem; color:#666;">Baca panduan sebelum mengisi kuesioner</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    with st.form("form_biodata"):
-        nama = st.text_input("Nama Lengkap")
-        nim = st.text_input("NIM / ID Mahasiswa")
-        univ = st.text_input("Universitas")
-        semester = st.selectbox("Semester", ["1", "2", "3", "4", "5", "6", "7", "8", ">8"])
+    pdf_data = get_pdf_base64()
+    
+    if pdf_data:
+        html_code = f"""
+        <div id="book-container" style="width: 100%; height: 550px; background: #f1f5f9; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 20px 0;">
+            <div id="loading" style="padding: 20px; font-weight: bold; color: #064e3b; font-size: 0.9rem;">⏳ Memuat Panduan Lengkap...</div>
+            
+            <div id="flipbook" style="display: none; width: 260px; height: 380px; margin: 20px auto;"></div>
+            
+            <!-- Tombol Navigasi Internal - Jelas & Tidak Mepet -->
+            <div id="nav-controls" style="display: none; margin-top: 30px; gap: 30px; z-index: 100;">
+                <button onclick="pageFlip.flipPrev()" style="padding: 12px 20px; border-radius: 12px; border: 2px solid #10b981; background: white; color: #10b981; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">< Kembali</button>
+                <button onclick="pageFlip.flipNext()" style="padding: 12px 20px; border-radius: 12px; border: none; background: #10b981; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(16,185,129,0.3);">Lanjut ></button>
+            </div>
+        </div>
         
-        submit_bio = st.form_submit_button("Mulai Kuisioner")
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
         
-        if submit_bio:
-            if nama and nim and univ:
-                st.session_state.user_data = {
+        <script>
+            let pageFlip;
+            const pdfData = atob("{pdf_data}");
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+            const container = document.getElementById('flipbook');
+            const loading = document.getElementById('loading');
+            const controls = document.getElementById('nav-controls');
+
+            async function renderPDF() {{
+                try {{
+                    const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
+                    const pdf = await loadingTask.promise;
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {{
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({{scale: 1.0}}); // Skala 1.0 agar pas
+                        
+                        const canvas = document.createElement('canvas');
+                        canvas.className = 'page';
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        await page.render({{canvasContext: context, viewport: viewport}}).promise;
+                        container.appendChild(canvas);
+                    }}
+
+                    loading.style.display = 'none';
+                    container.style.display = 'block';
+                    controls.style.display = 'flex';
+
+                    pageFlip = new St.PageFlip(container, {{
+                        width: 260,
+                        height: 380,
+                        size: "stretch",
+                        minWidth: 200,
+                        maxWidth: 300,
+                        minHeight: 300,
+                        maxHeight: 450,
+                        maxShadowOpacity: 0.5,
+                        showCover: true,
+                        mobileScrollSupport: true,
+                        clickEventForward: true,
+                        usePortrait: true,
+                        startPage: 0
+                    }});
+                    pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+                }} catch (e) {{
+                    loading.innerText = "Error: " + e.message;
+                }}
+            }}
+
+            renderPDF();
+        </script>
+        <style>
+            .page {{ background-color: white; box-shadow: 0 0 15px rgba(0,0,0,0.1); width: 100%; height: 100%; }}
+            button:active {{ transform: scale(0.95); opacity: 0.8; }}
+        </style>
+        """
+        st.components.v1.html(html_code, height=600)
+    else:
+        st.error("File PDF tidak ditemukan.")
+
+    if st.button("🚀 SELESAI MEMBACA & ISI BIODATA", type="primary", use_container_width=True):
+        st.session_state.step = 1
+        st.rerun()
+
+# ==========================================
+# STEP 1: IDENTITAS
+# ==========================================
+elif st.session_state.step == 1:
+    st.markdown("""
+        <div class="hero-section">
+            <h1 style="margin-bottom:0;">🎓 ANGKET RESPON MAHASISWA</h1>
+            <a href="https://www.s-elt.cloud" style="color: white; text-decoration: none; font-weight: 600; opacity: 0.9;">www.s-elt.cloud</a>
+            <p style="margin-top:15px; font-size: 1.1rem;">Evaluasi Model Smart-English Language Teaching (S-ELT)</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("👤 Identitas Responden")
+    
+    with st.form("id_form"):
+        nama = st.text_input("Nama / Inisial *")
+        peran = st.selectbox("Peran", ["Mahasiswa", "Dosen", "Guru", "Lainnya"])
+        digital = st.radio("Pernah menggunakan media digital?", ["Ya", "Tidak"], horizontal=True)
+        
+        col1, col2 = st.columns(2)
+        if col1.form_submit_button("⬅ Buka Panduan"):
+            st.session_state.step = 0
+            st.rerun()
+            
+        if col2.form_submit_button("Lanjutkan ke Instrumen ➔"):
+            if nama.strip():
+                st.session_state.data_diri = {
+                    "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "Nama": nama,
-                    "NIM": nim,
-                    "Universitas": univ,
-                    "Semester": semester,
-                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "Peran": peran,
+                    "Pengalaman_Digital": digital
                 }
-                st.session_state.page = 1
+                st.session_state.step = 2
                 st.rerun()
             else:
-                st.warning("Mohon lengkapi semua field biodata.")
+                st.warning("Mohon isi Nama/Inisial Anda.")
 
-# --- PAGE: QUESTIONNAIRE ---
-elif isinstance(st.session_state.page, int):
-    q_idx = st.session_state.page - 1
-    q = questions[q_idx]
+# ==========================================
+# STEP 2: INSTRUMEN
+# ==========================================
+elif st.session_state.step == 2:
+    st.title("📝 Instrumen Penilain")
+    st.info(f"Responden: **{st.session_state.data_diri['Nama']}**")
     
-    st.title(f"Situasi {st.session_state.page} dari {len(questions)}")
-    st.progress(st.session_state.page / len(questions))
-    
-    st.subheader("Skenario:")
-    st.write(q["scenario"])
-    
-    st.markdown("---")
-    st.subheader("Pilihan Tindakan:")
-    
-    current_ans = st.session_state.answers.get(str(q["id"]), None)
-    choice = st.radio(
-        "Pilih tindakan yang menurut Anda paling tepat:",
-        options=[opt["text"] for opt in q["options"]],
-        index=None if current_ans is None else [opt["text"] for opt in q["options"]].index(current_ans["text"])
-    )
-    
-    col1, col2 = st.columns([1,1])
-    with col1:
-        if st.session_state.page > 1:
-            if st.button("⬅️ Kembali"):
-                st.session_state.page -= 1
-                st.rerun()
-    with col2:
-        if st.button("Lanjut ➡️" if st.session_state.page < len(questions) else "Ringkasan 🏁"):
-            if choice:
-                selected_opt = next(opt for opt in q["options"] if opt["text"] == choice)
-                st.session_state.answers[str(q["id"])] = {
-                    "text": choice,
-                    "score": selected_opt["score"]
-                }
-                if st.session_state.page < len(questions):
-                    st.session_state.page += 1
-                else:
-                    st.session_state.page = "summary"
-                st.rerun()
-            else:
-                st.warning("Pilih salah satu jawaban.")
-
-# --- PAGE: SUMMARY ---
-elif st.session_state.page == "summary":
-    st.title("✅ Ringkasan Jawaban")
-    st.write(f"Terima kasih, **{st.session_state.user_data['Nama']}**!")
-    
-    total_score = 0
-    final_responses = {}
-    for k, v in st.session_state.user_data.items():
-        final_responses[k] = v
+    with st.form("survey_form"):
+        # 1. Likert
+        q_count = 1
+        all_scores = []
+        dim_means = {}
+        unanswered = []
         
-    summary_list = []
-    for q in questions:
-        ans = st.session_state.answers.get(str(q["id"]))
-        total_score += ans["score"] if ans else 0
-        final_responses[f"Q{q['id']}"] = ans["text"] if ans else ""
-        final_responses[f"Score{q['id']}"] = ans["score"] if ans else 0
-        summary_list.append({"No": q["id"], "Skor": ans["score"] if ans else 0})
+        for dimension, items in KUESIONER.items():
+            st.markdown(f'<div class="dimension-card">{dimension}</div>', unsafe_allow_html=True)
+            dim_scores = []
+            for item in items:
+                key = f"q_{q_count}"
+                # Set index=None agar tidak ada jawaban yang terpilih otomatis
+                val = st.radio(f"{q_count}. {item}", options=[5,4,3,2,1], 
+                               format_func=lambda x: LIKERT_OPTIONS[x], 
+                               key=key, horizontal=True, index=None)
+                
+                if val is not None:
+                    st.session_state.responses[key] = val
+                    dim_scores.append(val)
+                    all_scores.append(val)
+                else:
+                    unanswered.append(q_count)
+                q_count += 1
+            
+            if dim_scores:
+                dim_means[f"Mean_{dimension.split('.')[0]}"] = sum(dim_scores)/len(dim_scores)
 
-    final_responses["Total_Score"] = total_score
-    st.metric("Total Skor", f"{total_score} / 80")
-    
-    if st.button("🚀 Kirim Hasil Sekarang"):
-        with st.spinner("Sedang mengirim..."):
-            if save_via_apps_script(final_responses):
-                st.success("Berhasil! Data Anda sudah masuk ke Google Sheets Peneliti.")
-                st.balloons()
-                st.session_state.page = "finish"
+        # 2. Open Questions
+        st.markdown('<div class="dimension-card">D. PERTANYAAN TERBUKA</div>', unsafe_allow_html=True)
+        for i, q in enumerate(PERTANYAAN_TERBUKA):
+            key = f"essay_{i}"
+            st.session_state.essays[key] = st.text_area(q, key=key)
+
+        col1, col2 = st.columns(2)
+        if col1.form_submit_button("⬅ Kembali"):
+            st.session_state.step = 1
+            st.rerun()
+        
+        if col2.form_submit_button("🚀 Kirim Evaluasi"):
+            if unanswered:
+                st.error(f"Mohon lengkapi semua pertanyaan! (Nomor yang belum diisi: {unanswered[:10]}{'...' if len(unanswered)>10 else ''})")
             else:
-                st.error("Pengiriman otomatis gagal.")
-                st.info("Silakan copy data berikut dan kirim ke Peneliti:")
-                st.code(json.dumps(final_responses, indent=2))
+                # Prepare Payload
+                payload = st.session_state.data_diri.copy()
+                # Raw Scores
+                for k, v in st.session_state.responses.items():
+                    payload[k] = v
+                # Essays
+                for i, q in enumerate(PERTANYAAN_TERBUKA):
+                    payload[f"Essay_{i+1}"] = st.session_state.essays.get(f"essay_{i}", "")
+                # Means
+                payload["Overall_Mean"] = sum(all_scores)/len(all_scores)
+                payload.update(dim_means)
+                
+                with st.spinner("Mengirim data..."):
+                    if save_to_gsheet(payload):
+                        st.session_state.step = 3
+                        st.rerun()
+                    else:
+                        st.error("Gagal mengirim data ke Spreadsheet.")
 
-# --- PAGE: FINISH ---
-elif st.session_state.page == "finish":
-    st.title("🏁 Selesai")
-    st.success("Jawaban Anda telah tersimpan.")
+# ==========================================
+# STEP 3: SELESAI
+# ==========================================
+elif st.session_state.step == 3:
+    st.balloons()
+    st.markdown(f"""
+        <div class="success-card">
+            <h1 style="font-size: 4rem;">🥳</h1>
+            <h1>Terima Kasih, {st.session_state.data_diri['Nama']}!</h1>
+            <p style="font-size: 1.2rem; color: #166534;">Evaluasi Anda terhadap model S-ELT telah kami terima.</p>
+            <p>Data Anda telah tersimpan secara real-time untuk analisis lebih lanjut.</p>
+        </div>
+    """, unsafe_allow_html=True)
     if st.button("Mulai Baru"):
-        st.session_state.clear()
+        for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
